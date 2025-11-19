@@ -1,0 +1,380 @@
+---
+title: "Carbon_Emissions Analysis Using Regression, Knn, Anova, Clustering, Association Rules"
+author: "Elias"
+date: "2025-11-09"
+output:
+  html_document: default
+  word_document: default
+  pdf_document: default
+---
+#### Introduction:
+####  This project analyzes global CO₂ emissions to understand how population growth and temperature changes influence emission patterns.
+
+#### Goal:
+#### To identify key relationships, classify emission levels, and group countries using regression, KNN, ANOVA, clustering, and association rules.
+
+#  [1]: Inspecting the Structure and Getting an Overview 
+
+```{r}
+library(readr)
+
+# Loading my dataset
+C02_data <- read_csv("C:/Users/bzimb/Desktop/DA Proj/C02_data.csv")
+View(C02_data)
+
+
+head(C02_data)
+
+summary(C02_data)
+
+str(C02_data)
+
+
+colSums(is.na(C02_data))
+
+
+```
+#### [1]:
+
+##### - The dataset contains 4,369 observations and 8 variables: numeric variables (year, population,  temperature_change_from_co2,  consumption_co2, co2) and one categorical variable (country).
+##### - Missing values are present in temperature_change_from_co2 (843 NAs) ; all other variables are complete.
+##### - Summary statistics show wide variation: population ranges from ~255,000 to ~8 billion, co2 ranges from 0.455 to 37,791, and temperature change variables have small numeric scales but some outliers.
+##### - All numeric variables are of type double and country is character, making the dataset ready for preprocessing and further analysis.
+
+# [2]  Handling the missing Values
+
+```{r}
+C02_data$temperature_change_from_co2[is.na(C02_data$temperature_change_from_co2)] <- median(C02_data$temperature_change_from_co2, na.rm = TRUE)
+
+colSums(is.na(C02_data))
+
+
+```
+### [2]
+##### - Missing values in 'temperature_change_from_co2' (843 NAs) were replaced with the median of their respective columns.
+
+##### - After imputation, all variables have complete data with no missing values, making the dataset ready for further analysis.
+
+
+# [3]  Checking for outliers and Relationships 
+
+## CO2 VS Population Relationship
+
+```{r}
+library(ggplot2)
+
+# Scatterplot CO2 vs Population
+ggplot(C02_data, aes(x = population, y = co2)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", color = "blue") +
+  ggtitle("CO2 vs Population") +
+  theme_minimal()
+
+
+```
+
+
+### [3 - i]
+
+##### There is a clear Moderate Positive linear relationship between population and CO2 emissions. 
+##### The upward slope of the blue regression line indicates that as population increases, CO2 emissions tend to increase as well.
+
+## Temp VS CO2 Relationship 
+
+```{r}
+# CO2 vs Temperature Change from CO2
+
+ggplot(C02_data, aes(x = temperature_change_from_co2, y = co2)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", color = "red") +
+  ggtitle("CO2 vs Temperature Change from CO2") +
+  theme_minimal()
+
+```
+
+
+### [3 - ii]
+
+##### The plot reveals a very strong, positive, and predominantly linear relationship between the two variables - temperature_change_from_co2 and Co2 . 
+
+##### This indicates that as total CO2 emissions increase, the temperature change attributed to CO2 increases in a highly predictable, linear fashion.
+
+
+
+##  - corplot
+
+
+```{r}
+ library(corrplot)
+
+#Im will Select only CO2, population, and temperature change columns here
+subset_numeric <- C02_data[, c("co2", "population", "temperature_change_from_co2")]
+
+##### Getting the correlation matrix
+cor_matrix_subset <- cor(subset_numeric, use = "complete.obs")
+
+# Plotting correlation matrix
+corrplot(cor_matrix_subset, method = "color", type = "upper", 
+         addCoef.col = "black", tl.cex = 0.8, number.cex = 0.8,
+         title = "Correlation Matrix: CO2, Population, Temperature Changes", mar=c(0,0,1,0))
+
+
+```
+
+
+
+### [3 - iii]
+
+##### - CO2 is strongly positively correlated with population (0.90) and  temperature_change_from_co2 (0.97), indicating that as population and temperature change increase, CO2 emissions also rise.
+
+##### Population also has strong positive correlations with the temperature change variables (temperature_change_from_co2 0.85 showing that larger populations are associated with higher temperature impacts.
+
+
+# [4]: Regression Analysis
+
+## CO2 ~ Population
+
+
+```{r}
+# Performing Linear regression: CO2 as a function of population
+
+lm_co2_pop <- lm(co2 ~ population, data = C02_data)
+
+ 
+summary(lm_co2_pop)
+
+
+```
+## [4 - i]
+##### - R-squared (0.818): About 81.8% of the variance in CO2 emissions is explained by population alone.
+##### - - Significance: Extremely significant (p-value < 2e-16), indicating a very strong linear relationship.
+
+## CO2 ~ Temperature Change from CO2
+
+```{r}
+# Performing Linear regression: CO2 as a function of temperature_change_from_co2
+lm_co2_temp <- lm(co2 ~ temperature_change_from_co2, data = C02_data)
+
+# View summary
+summary(lm_co2_temp)
+```
+## [4 - ii]
+##### - R-squared (0.936): 93.6% of CO2 variation is explained by temperature change, a very strong relationship.
+##### - - Significance: Extremely significant (p-value < 2.2e-16), confirming a highly predictive model.
+
+
+
+
+### [4 iiii] Both population and temperature change significantly explain the Carbon  emissions.
+
+
+
+# KNN (K-Nearest Neighbors)
+
+### KNN (Predicting CO₂ Emissions)
+
+```{r}
+ library(class)
+
+# 1. Creating categorical CO2 levels (Low, Medium, High)
+C02_data$CO2_Level <- cut(
+  C02_data$co2,
+  breaks = quantile(C02_data$co2, probs = c(0, 0.33, 0.66, 1), na.rm = TRUE),
+  labels = c("Low", "Medium", "High"),
+  include.lowest = TRUE
+)
+
+# Checking class distribution
+table(C02_data$CO2_Level)
+
+# Remove rows with any missing values
+C02_data <- na.omit(C02_data)
+
+# 2. Selecting and scaling numeric features
+features <- C02_data[, c("population", "temperature_change_from_co2")]
+features_scaled <- scale(features)
+
+# 3. Defining target variable
+target <- C02_data$CO2_Level
+
+# Randomize and split data
+set.seed(123)
+rand_index <- sample(1:nrow(C02_data))
+train_index <- rand_index[1:3500]
+test_index  <- rand_index[3501:nrow(C02_data)]
+
+train_x <- features_scaled[train_index, ]
+test_x  <- features_scaled[test_index, ]
+train_y <- target[train_index]
+test_y  <- target[test_index]
+
+# 5. KNN with (k = 5)
+pred_knn <- knn(train = train_x, test = test_x, cl = train_y, k = 5)
+
+# 6. Actual vs predicted
+comparison <- data.frame(Actual = test_y, Predicted = pred_knn)
+print(head(comparison))
+
+# 7. Evaluating model accuracy
+accuracy <- mean(pred_knn == test_y)
+cat("KNN Model Accuracy:", round(accuracy * 100, 2), "%\n")
+
+```
+
+##### The KNN algorithm was applied to classify CO₂ emission levels into three categories — Low, Medium, and High — based on selected numeric features. [Population and Temperature Change from CO₂ were used as the features (predictors).]
+##### Before modeling, all features were scaled to ensure equal contribution during distance calculations.
+##### The dataset was randomly split into training and testing subsets (80/20).
+
+
+
+
+##### The model output compared the actual and predicted CO₂ categories for several test points.
+##### Most predictions matched the true classes, indicating that the model effectively captured the relationships between population, temperature change, and CO₂ emissions.
+
+##### Model Accuracy was 78%
+
+
+
+# ANOVA
+
+### One-Way ANOVA — CO₂ by Country
+
+```{r}
+# One-Way ANOVA: CO2 by Country
+anova_result <- aov(co2 ~ country, data = C02_data)
+
+# Summary of the ANOVA model
+summary(anova_result)
+```
+##### I perfomed a one-way ANOVA to examine whether mean CO₂ emissions differ significantly across countries.
+##### The ANOVA shows a statistically significant difference in mean CO₂ emissions across countries.
+##### F(132, 4236) = 583.7, p < 2e-16
+
+#####  CO₂ emission levels vary widely between countries, suggesting strong country-level effects.
+
+
+# Clustering (K-Means)
+
+### Determine Optimal Number of Clusters (Elbow Method)
+
+```{r}
+# numeric variables
+cluster_data <- C02_data[, c("co2", "population", "temperature_change_from_co2")]
+
+# Scaling
+cluster_scaled <- scale(cluster_data)
+
+# Computing total within-cluster sum of squares for k = 1 to 10
+set.seed(123)
+wss <- numeric(10)
+for (k in 1:10) {
+  kmeans_model <- kmeans(cluster_scaled, centers = k, nstart = 25)
+  wss[k] <- kmeans_model$tot.withinss
+}
+
+# here l will plot using the Elbow Method
+plot(1:10, wss, type = "b",
+     pch = 19, frame = FALSE,
+     xlab = "Number of Clusters (k)",
+     ylab = "Total Within-Cluster Sum of Squares (WSS)",
+     main = "Elbow Method for Determining Optimal k")
+
+```
+
+
+
+#####   The "elbow" of the curve is located at k = 3. This is the point after which adding more clusters yields diminishing returns. Therefore, the Elbow Method suggests that 3 is the optimal number of clusters for segmenting this dataset based on co2, population, and temperature_change_from_co2.
+
+```{r}
+ 
+set.seed(123)
+C02_scaled <- scale(C02_data[, c("co2", "population", "temperature_change_from_co2")])
+kmeans_result <- kmeans(C02_scaled, centers = 3, nstart = 25)
+
+C02_data$Cluster <- as.factor(kmeans_result$cluster)
+
+
+# Visualizing clusters
+library(ggplot2)
+
+ggplot(C02_data, aes(x = population, y = co2, color = Cluster)) +
+  geom_point(alpha = 0.6, size = 2) +
+  scale_color_manual(values = c("#1f77b4", "#ff7f0e", "#2ca02c")) +
+  labs(title = "CO2 Clusters Based on Population and Temperature Change",
+       x = "Population",
+       y = "CO2 Emissions",
+       color = "Cluster") +
+  theme_minimal()
+
+
+```
+
+
+##### Cluster 1 (Blue– Low Emitters):
+##### This cluster represents countries with low population and low CO₂ emissions, generally located at the bottom-left region of the plot.
+##### It mostly includes smaller or less industrialized nations with minimal carbon contribution.
+
+##### Cluster 2 (Green  – Medium to High Emitters):
+##### This cluster contains countries with moderate to high population sizes and CO₂ emissions.
+##### It represents the largest and most diverse group, capturing most nations and regions with industrial activity and noticeable carbon output.
+
+##### Cluster 3 (Orange – Highest Emitters / Global Totals):
+##### This small, distinct group includes entities with extremely high population and CO₂ levels.
+##### It likely corresponds to the aggregated ‘World’ or continental data, where emissions are at their global peak.
+##### These points are clearly separated from the rest, indicating a unique emission pattern at the global scale.
+
+
+
+
+
+
+# Market Basket / Association Rule Mining
+
+
+```{r}
+  # Step 5: Association Rule Mining
+library(arules); library(arulesViz)
+
+assoc_data <- C02_data[, c("co2", "population", "temperature_change_from_co2")]
+assoc_data[] <- lapply(assoc_data, function(x) cut(x, 3, labels = c("Low", "Med", "High")))
+
+rules <- apriori(as(assoc_data, "transactions"), parameter = list(supp=0.05, conf=0.8, minlen=2))
+
+inspect(head(sort(rules, by="lift"), 10))
+plot(head(sort(rules, by="lift"), 10), method="graph", engine="htmlwidget")
+
+```
+
+##### The Apriori algorithm identified strong relationships between the categorical versions of CO₂, population, and temperature change.
+
+##### From the top rules:
+
+##### Countries with Low Population and Low Temperature Change almost always have Low CO₂ emissions.
+
+##### Conversely, Low CO₂ is strongly associated with both Low Population and Low Temperature Change.
+
+##### The confidence values (≥ 0.99) mean these relationships hold true for over 99% of the observations.
+
+##### The lift values (~ 1.01–1.02) indicate a strong positive correlation, showing these factors frequently occur together more often than expected by chance.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
